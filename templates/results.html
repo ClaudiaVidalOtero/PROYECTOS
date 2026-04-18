@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Categorías generadas</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1.5rem; background: #f5f7fb; color: #111; }
+    main { max-width: 1100px; margin: auto; background: #fff; padding: 2rem; border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.08); }
+    h1, h2, h3 { color: #0b3d91; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+    th, td { padding: 0.7rem 0.8rem; border: 1px solid #d6d8dd; text-align: left; }
+    th { background: #eef2fb; }
+    .category { margin-top: 2rem; padding: 1rem; border: 1px solid #d6d8dd; border-radius: 12px; background: #f8fbff; }
+    .category form, .category table { margin-top: 0.8rem; }
+    .field-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-top: 0.75rem; }
+    .field-row label { display: block; font-size: 0.95rem; }
+    .field-row input[type="text"], .field-row select { width: 240px; padding: 0.55rem 0.65rem; border-radius: 8px; border: 1px solid #c4c7d0; }
+    button { background: #0b3d91; color: white; border: none; padding: 0.9rem 1.4rem; border-radius: 8px; cursor: pointer; }
+    button:hover { background: #0f4ca0; }
+    .summary { margin-bottom: 1.5rem; }
+    .help { font-size: 0.95rem; color: #444; margin-top: 0.5rem; }
+    .match-list { margin: 0.8rem 0; padding: 1rem; border-radius: 10px; background: #eef3ff; }
+    .small-note { color: #5a5a5a; font-size: 0.95rem; }
+    .alert { padding: 1rem; border-radius: 8px; background: #fff4f4; color: #76262f; border: 1px solid #f2c2c2; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Categorías generadas</h1>
+    <p class="summary">Se han procesado <strong>{{ total }}</strong> participantes y se han creado <strong>{{ groups|length }}</strong> categorías.</p>
+    <p><a href="{{ url_for('index') }}">Subir otro archivo</a></p>
+
+    <form method="post" action="{{ url_for('review') }}">
+      <textarea name="participants_json" hidden>{{ participants_json|tojson() }}</textarea>
+      <input type="hidden" name="category_count" value="{{ groups|length }}">
+
+      {% for category, participants in groups %}
+        <section class="category">
+          <input type="hidden" name="category_key_{{ loop.index0 }}" value="{{ category }}">
+          <h2>Categoría: {{ category }}</h2>
+          <div class="field-row">
+            <label>Nombre editable
+              <input type="text" name="category_label_{{ loop.index0 }}" value="{{ category }}">
+            </label>
+            <label>Acción para categoría
+              <select name="category_action_{{ loop.index0 }}">
+                <option value="keep">Conservar</option>
+                <option value="delete">Eliminar categoría</option>
+                {% if groups|length > 1 %}
+                  <option value="move">Mover participantes</option>
+                {% endif %}
+              </select>
+            </label>
+            {% if groups|length > 1 %}
+              <label>Mover a
+                <select name="category_move_target_{{ loop.index0 }}">
+                  <option value="">Selecciona otra categoría</option>
+                  {% for target, _ in groups %}
+                    {% if target != category %}
+                      <option value="{{ target }}">{{ target }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+              </label>
+            {% endif %}
+          </div>
+
+          <p class="small-note">Participantes: {{ participants|length }} · Dojo y país pueden afectar las alineaciones.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Sexo</th>
+                <th>Edad</th>
+                <th>Peso</th>
+                <th>Dojo</th>
+                <th>País</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for participant in participants %}
+                <tr>
+                  <td>{{ participant.name }}</td>
+                  <td>{{ participant.sex }}</td>
+                  <td>{{ participant.age if participant.age is not none else '-' }}</td>
+                  <td>{{ participant.weight if participant.weight is not none else '-' }}</td>
+                  <td>{{ participant.dojo }}</td>
+                  <td>{{ participant.country }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+          {% set matchup = group_matchups[category] %}
+          <div class="match-list">
+            {% if matchup.type == 'insufficient' %}
+              <strong>Atención:</strong> menos de 3 participantes. Elige si deseas eliminar esta categoría o mover los competidores.
+            {% elif matchup.type == 'round_robin' %}
+              <strong>Programa Round Robin:</strong>
+              <ul>
+                {% for a, b in matchup.matches %}
+                  <li>{{ a.name }} vs {{ b.name }} ({{ a.dojo }} / {{ b.dojo }})</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <strong>Alineaciones de primera ronda:</strong>
+              <ul>
+                {% for a, b in matchup.matches %}
+                  <li>{{ a.name }} vs {{ b.name }} {% if a.dojo == b.dojo %}(mismo dojo){% endif %}</li>
+                {% endfor %}
+                {% if matchup.bye %}
+                  <li>Descansa: {{ matchup.bye.name }}</li>
+                {% endif %}
+              </ul>
+            {% endif %}
+          </div>
+        </section>
+      {% endfor %}
+
+      <div style="margin-top: 2rem;">
+        <button type="submit">Actualizar categorías y generar combates</button>
+      </div>
+    </form>
+
+  </main>
+</body>
+</html>

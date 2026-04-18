@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ category.name }}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #f5f7fb; color: #111; }
+    main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+    h1 { color: #0b3d91; margin-bottom: 1rem; }
+    .header { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); margin-bottom: 2rem; }
+    .header a { color: #0b3d91; text-decoration: none; }
+    .header a:hover { text-decoration: underline; }
+    .section { margin-bottom: 2rem; }
+    .section h2 { color: #0b3d91; margin-bottom: 1rem; font-size: 1.1rem; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+    th, td { padding: 1rem; border-bottom: 1px solid #e0e0e0; text-align: left; }
+    th { background: #eef2fb; font-weight: 600; color: #0b3d91; }
+    tr:last-child td { border-bottom: none; }
+    .match-card { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); margin-bottom: 1rem; }
+    .match-card h3 { color: #0b3d91; margin-bottom: 0.5rem; }
+    .match-result { display: flex; gap: 1rem; align-items: center; }
+    .vs { color: #888; font-weight: 500; }
+    .match-form { display: flex; gap: 0.5rem; align-items: center; }
+    .match-form select { padding: 0.5rem; border: 1px solid #c4c7d0; border-radius: 6px; }
+    .match-form button { background: #0b3d91; color: white; padding: 0.6rem 1rem; border: none; border-radius: 6px; cursor: pointer; }
+    .match-form button:hover { background: #0f4ca0; }
+    .bye-badge { background: #f0f0f0; color: #555; padding: 0.3rem 0.6rem; border-radius: 4px; font-size: 0.85rem; }
+    .pending-badge { background: #fff3cd; color: #856404; padding: 0.3rem 0.6rem; border-radius: 4px; font-size: 0.85rem; }
+    .completed-badge { background: #d4edda; color: #155724; padding: 0.3rem 0.6rem; border-radius: 4px; font-size: 0.85rem; }
+    .empty { text-align: center; padding: 2rem 1rem; color: #888; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{{ category.name }}</h1>
+    
+    <div class="header">
+      <p><strong>Modalidad:</strong> {{ category.modality|upper }}</p>
+      <p><strong>Participantes:</strong> {{ participants|length }}</p>
+      <p><a href="{{ url_for('competition_detail', comp_id=category.competition_id) }}">Volver al campeonato</a></p>
+    </div>
+
+    <!-- Participantes -->
+    <div class="section">
+      <h2>Participantes</h2>
+      {% if participants %}
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Género</th>
+              <th>Edad</th>
+              {% if category.modality == 'kumite' %}
+                <th>Peso</th>
+              {% else %}
+                <th>Grado</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in participants %}
+              <tr>
+                <td>{{ p.name }}</td>
+                <td>{{ p.gender }}</td>
+                <td>{{ p.age_at_date(p.competition.event_date) if p.age_at_date(p.competition.event_date) else '-' }}</td>
+                {% if category.modality == 'kumite' %}
+                  <td>{{ p.weight if p.weight else '-' }} kg</td>
+                {% else %}
+                  <td>{{ p.grade if p.grade else '-' }}</td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="empty">Sin participantes en esta categoría.</div>
+      {% endif %}
+    </div>
+
+    <!-- Combates -->
+    <div class="section">
+      <h2>Combates</h2>
+      {% if matches %}
+        {% set current_round = 0 %}
+        {% for match in matches %}
+          {% if match.round_number != current_round %}
+            {% if current_round > 0 %}</div>{% endif %}
+            {% set current_round = match.round_number %}
+            <h3 style="color: #0b3d91; margin-top: 1.5rem;">Ronda {{ current_round }}</h3>
+            <div>
+          {% endif %}
+
+          <div class="match-card">
+            {% if match.status == 'bye' %}
+              <h3>
+                <span class="bye-badge">BYE</span>
+                {{ match.participant1.name }} descansa
+              </h3>
+            {% else %}
+              <h3>
+                <span class="{% if match.status == 'completed' %}completed-badge{% else %}pending-badge{% endif %}">
+                  {{ match.status|upper }}
+                </span>
+              </h3>
+              <div class="match-result">
+                <span>{{ match.participant1.name }}</span>
+                <span class="vs">VS</span>
+                <span>{{ match.participant2.name if match.participant2 else '(por determinar)' }}</span>
+              </div>
+
+              {% if match.status != 'completed' %}
+                <form method="post" action="{{ url_for('record_result', match_id=match.id) }}" class="match-form" style="margin-top: 1rem;">
+                  <select name="winner_id" required>
+                    <option value="">Selecciona ganador</option>
+                    <option value="{{ match.participant1.id }}">{{ match.participant1.name }}</option>
+                    {% if match.participant2 %}
+                      <option value="{{ match.participant2.id }}">{{ match.participant2.name }}</option>
+                    {% endif %}
+                  </select>
+                  <button type="submit">Registrar resultado</button>
+                </form>
+              {% else %}
+                <p style="margin-top: 1rem; color: #28a745;"><strong>Ganador:</strong> {{ match.winner.name if match.winner else '-' }}</p>
+              {% endif %}
+            {% endif %}
+          </div>
+        {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">Sin combates generados. Crea la categoría en el campeonato y presiona "Asignar a categorías y generar llaves".</div>
+      {% endif %}
+    </div>
+  </main>
+</body>
+</html>

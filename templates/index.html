@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestor de Competiciones de Karate</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #f5f7fb; color: #111; }
+    main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+    h1 { color: #0b3d91; margin-bottom: 2rem; }
+    .btn-new { background: #0b3d91; color: white; padding: 0.9rem 1.4rem; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-block; margin-bottom: 2rem; }
+    .btn-new:hover { background: #0f4ca0; }
+    .competitions { display: grid; gap: 1.5rem; }
+    .comp-card { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); border-left: 4px solid #0b3d91; }
+    .comp-card h2 { color: #0b3d91; margin-bottom: 0.5rem; }
+    .comp-card p { color: #555; margin-bottom: 0.3rem; }
+    .comp-card a { color: #0b3d91; text-decoration: none; margin-top: 1rem; display: inline-block; }
+    .comp-card a:hover { text-decoration: underline; }
+    .empty { text-align: center; padding: 3rem 1rem; color: #888; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Gestor de Competiciones de Karate</h1>
+    <a href="{{ url_for('new_competition') }}" class="btn-new">+ Crear nuevo campeonato</a>
+
+    {% if competitions %}
+      <div class="competitions">
+        {% for comp in competitions %}
+          <div class="comp-card">
+            <h2>{{ comp.name }}</h2>
+            <p><strong>Fecha del torneo:</strong> {{ comp.event_date.strftime('%d/%m/%Y') }}</p>
+            <p><strong>Participantes:</strong> {{ comp.participants|length }}</p>
+            <p><strong>Creado:</strong> {{ comp.created_at.strftime('%d/%m/%Y') }}</p>
+            <a href="{{ url_for('competition_detail', comp_id=comp.id) }}">Abrir →</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty">
+        <p>No hay campeonatos. <a href="{{ url_for('new_competition') }}">Crea uno ahora.</a></p>
+      </div>
+    {% endif %}
+  </main>
+</body>
+</html>

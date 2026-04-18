@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Revisión de categorías</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1.5rem; background: #f5f7fb; color: #111; }
+    main { max-width: 1100px; margin: auto; background: #fff; padding: 2rem; border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.08); }
+    h1, h2, h3 { color: #0b3d91; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+    th, td { padding: 0.7rem 0.8rem; border: 1px solid #d6d8dd; text-align: left; }
+    th { background: #eef2fb; }
+    .category { margin-top: 2rem; padding: 1rem; border: 1px solid #d6d8dd; border-radius: 12px; background: #f8fbff; }
+    .match-list { margin: 0.8rem 0; padding: 1rem; border-radius: 10px; background: #eef3ff; }
+    a { color: #0b3d91; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .summary { margin-bottom: 1.5rem; }
+    .small-note { color: #5a5a5a; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Resultado final de categorías</h1>
+    <p class="summary">Se han procesado <strong>{{ total }}</strong> participantes tras aplicar los cambios.</p>
+    <p><a href="{{ url_for('index') }}">Subir otro archivo</a></p>
+
+    {% for category, participants in groups %}
+      <section class="category">
+        <h2>{{ category }}</h2>
+        <p class="small-note">Participantes: {{ participants|length }}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Sexo</th>
+              <th>Edad</th>
+              <th>Peso</th>
+              <th>Dojo</th>
+              <th>País</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for participant in participants %}
+              <tr>
+                <td>{{ participant.name }}</td>
+                <td>{{ participant.sex }}</td>
+                <td>{{ participant.age if participant.age is not none else '-' }}</td>
+                <td>{{ participant.weight if participant.weight is not none else '-' }}</td>
+                <td>{{ participant.dojo }}</td>
+                <td>{{ participant.country }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        {% set matchup = group_matchups[category] %}
+        <div class="match-list">
+          {% if matchup.type == 'insufficient' %}
+            <strong>Atención:</strong> esta categoría todavía tiene menos de 3 participantes y no puede generar combate.
+          {% elif matchup.type == 'round_robin' %}
+            <strong>Round Robin</strong>
+            <ul>
+              {% for a, b in matchup.matches %}
+                <li>{{ a.name }} vs {{ b.name }} ({{ a.dojo }} / {{ b.dojo }})</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <strong>Alineaciones de primera ronda</strong>
+            <ul>
+              {% for a, b in matchup.matches %}
+                <li>{{ a.name }} vs {{ b.name }} {% if a.dojo == b.dojo %}(mismo dojo){% endif %}</li>
+              {% endfor %}
+              {% if matchup.bye %}
+                <li>Descansa: {{ matchup.bye.name }}</li>
+              {% endif %}
+            </ul>
+          {% endif %}
+        </div>
+      </section>
+    {% endfor %}
+
+  </main>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ competition.name }}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #f5f7fb; color: #111; font-size: 14px; }
+    main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+    h1 { color: #0b3d91; margin-bottom: 1rem; font-size: 1.5rem; }
+    .header { background: white; padding: 1rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); margin-bottom: 1.5rem; }
+    .header p { margin: 0.3rem 0; }
+    .header a { color: #0b3d91; text-decoration: none; }
+    .header a:hover { text-decoration: underline; }
+    .section { margin-bottom: 2rem; }
+    .section h2 { color: #0b3d91; margin-bottom: 1rem; font-size: 1.2rem; }
+    .form-section { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); margin-bottom: 1.5rem; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-weight: 500; margin-bottom: 0.3rem; }
+    input[type="file"] { margin-bottom: 0.5rem; }
+    button { background: #0b3d91; color: white; padding: 0.7rem 1.2rem; border: none; border-radius: 8px; cursor: pointer; }
+    button:hover { background: #0f4ca0; }
+    .categories { display: grid; gap: 1rem; }
+    .cat-card { background: white; padding: 1rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); border-left: 4px solid #0b3d91; }
+    .cat-card h3 { color: #0b3d91; margin-bottom: 0.5rem; }
+    .cat-card p { margin: 0.3rem 0; font-size: 0.95rem; }
+    .cat-card a { color: #0b3d91; text-decoration: none; display: inline-block; margin-top: 0.5rem; }
+    .cat-card a:hover { text-decoration: underline; }
+    .btn-link { color: #0b3d91; text-decoration: none; cursor: pointer; border: none; background: none; padding: 0; font-size: 1rem; }
+    .btn-link:hover { text-decoration: underline; }
+    .tabs { display: flex; gap: 1rem; margin-bottom: 1rem; border-bottom: 2px solid #ddd; }
+    .tab-btn { background: none; border: none; padding: 0.7rem 1rem; border-bottom: 3px solid transparent; cursor: pointer; color: #555; }
+    .tab-btn.active { color: #0b3d91; border-bottom-color: #0b3d91; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .empty { text-align: center; padding: 2rem 1rem; color: #888; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{{ competition.name }}</h1>
+    
+    <div class="header">
+      <p><strong>Fecha del torneo:</strong> {{ competition.event_date.strftime('%d/%m/%Y') }}</p>
+      <p><strong>Participantes cargados:</strong> {{ competition.participants|length }}</p>
+      <p><a href="{{ url_for('competition_settings', comp_id=competition.id) }}">Editar configuración</a> · <a href="{{ url_for('index') }}">Volver</a></p>
+    </div>
+
+    <!-- Cargar Excel -->
+    <div class="section">
+      <h2>Cargar participantes</h2>
+      <div class="form-section">
+        <form method="post" action="{{ url_for('upload_participants', comp_id=competition.id) }}" enctype="multipart/form-data">
+          <div class="form-group">
+            <label for="file">Archivo Excel con participantes</label>
+            <input type="file" id="file" name="file" accept=".xlsx,.xls" required>
+          </div>
+          <button type="submit">Cargar participantes</button>
+        </form>
+        <p style="margin-top: 1rem; font-size: 0.9rem; color: #666;">
+          Esperado: numero_participante, nombre_participante, edad, fecha_nacimiento, grado, kata, kumite, peso, género.
+        </p>
+      </div>
+    </div>
+
+    <!-- Kata y Kumite tabs -->
+    <div class="section">
+      <h2>Categorías</h2>
+      
+      <div class="tabs">
+        <button class="tab-btn active" onclick="showTab('kata')">KATA</button>
+        <button class="tab-btn" onclick="showTab('kumite')">KUMITE</button>
+      </div>
+
+      <!-- KATA -->
+      <div id="kata" class="tab-content active">
+        <div class="form-section">
+          <p><strong>Participantes en Kata:</strong> {% set kata_count = competition.participants|selectattr('kata_participation', 'equalto', true)|list|length %}{{ kata_count }}</p>
+          
+          {% if kata_count > 0 %}
+            <form method="post" action="{{ url_for('assign_and_bracket', comp_id=competition.id, modality='kata') }}">
+              <button type="submit" name="generate_brackets" value="1">Asignar a categorías y generar llaves</button>
+            </form>
+          {% endif %}
+
+          <h3 style="margin-top: 1.5rem;">Crear categoría de Kata</h3>
+          <a href="{{ url_for('new_category', comp_id=competition.id) }}?modality=kata">+ Crear categoría</a>
+        </div>
+
+        {% if kata_categories %}
+          {% set kata_groups = {} %}
+          {% for cat in kata_categories %}
+            {% set group_name = cat.group or 'Sin Grupo' %}
+            {% if group_name not in kata_groups %}
+              {% set _ = kata_groups.update({group_name: []}) %}
+            {% endif %}
+            {% set _ = kata_groups[group_name].append(cat) %}
+          {% endfor %}
+          
+          {% for group_name, cats in kata_groups.items() %}
+            <div style="margin-bottom: 2rem;">
+              <h4 style="color: #0b3d91; margin-bottom: 1rem; font-size: 1.1rem; border-bottom: 2px solid #0b3d91; padding-bottom: 0.5rem;">
+                {{ group_name }}
+              </h4>
+              <div class="categories">
+                {% for cat in cats %}
+                  <div class="cat-card">
+                    <h3>{{ cat.name }}</h3>
+                    {% set criteria = cat.criteria %}
+                    <p>
+                      {% if criteria.get('age_min') or criteria.get('age_max') %}
+                        Edad: {{ criteria.get('age_min', '-') }}-{{ criteria.get('age_max', '-') }} años |
+                      {% endif %}
+                      Género: {{ criteria.get('gender', 'X') }}
+                      {% if criteria.get('grade_min') or criteria.get('grade_max') %}
+                        | Grado: {% if criteria.get('grade_min') %}desde {{ criteria.get('grade_min_display', criteria.get('grade_min')) }}{% endif %}{% if criteria.get('grade_max') %}hasta {{ criteria.get('grade_max_display', criteria.get('grade_max')) }}{% endif %}
+                      {% endif %}
+                    </p>
+                    <p>Competidores: {{ cat.participants|length }}</p>
+                    <div style="margin-top: 0.5rem;">
+                      <a href="{{ url_for('category_detail', cat_id=cat.id) }}">Ver detalles →</a>
+                      {% if cat.name not in ['faltan datos', 'extras'] %}
+                        | <a href="{{ url_for('edit_category', cat_id=cat.id) }}" style="color: #0b3d91;">Editar</a>
+                        | <a href="#" onclick="deleteCategory({{ cat.id }}, '{{ cat.name }}')" style="color: #dc3545;">Eliminar</a>
+                      {% endif %}
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty">No hay categorías de Kata. <a href="{{ url_for('new_category', comp_id=competition.id) }}?modality=kata">Crea una.</a></div>
+        {% endif %}
+      </div>
+
+      <!-- KUMITE -->
+      <div id="kumite" class="tab-content">
+        <div class="form-section">
+          <p><strong>Participantes en Kumite:</strong> {% set kumite_count = competition.participants|selectattr('kumite_participation', 'equalto', true)|list|length %}{{ kumite_count }}</p>
+          
+          {% if kumite_count > 0 %}
+            <form method="post" action="{{ url_for('assign_and_bracket', comp_id=competition.id, modality='kumite') }}">
+              <button type="submit" name="generate_brackets" value="1">Asignar a categorías y generar llaves</button>
+            </form>
+          {% endif %}
+
+          <h3 style="margin-top: 1.5rem;">Crear categoría de Kumite</h3>
+          <a href="{{ url_for('new_category', comp_id=competition.id) }}?modality=kumite">+ Crear categoría</a>
+        </div>
+
+        {% if kumite_categories %}
+          {% set kumite_groups = {} %}
+          {% for cat in kumite_categories %}
+            {% set group_name = cat.group or 'Sin Grupo' %}
+            {% if group_name not in kumite_groups %}
+              {% set _ = kumite_groups.update({group_name: []}) %}
+            {% endif %}
+            {% set _ = kumite_groups[group_name].append(cat) %}
+          {% endfor %}
+          
+          {% for group_name, cats in kumite_groups.items() %}
+            <div style="margin-bottom: 2rem;">
+              <h4 style="color: #0b3d91; margin-bottom: 1rem; font-size: 1.1rem; border-bottom: 2px solid #0b3d91; padding-bottom: 0.5rem;">
+                {{ group_name }}
+              </h4>
+              <div class="categories">
+                {% for cat in cats %}
+                  <div class="cat-card">
+                    <h3>{{ cat.name }}</h3>
+                    {% set criteria = cat.criteria %}
+                    <p>
+                      {% if criteria.get('age_min') or criteria.get('age_max') %}
+                        Edad: {{ criteria.get('age_min', '-') }}-{{ criteria.get('age_max', '-') }} años |
+                      {% endif %}
+                      Género: {{ criteria.get('gender', 'X') }}
+                      {% if criteria.get('weight_min') or criteria.get('weight_max') %} | Peso: {{ criteria.get('weight_min', '-') }}-{{ criteria.get('weight_max', '-') }} kg{% endif %}
+                    </p>
+                    <p>Competidores: {{ cat.participants|length }}</p>
+                    <div style="margin-top: 0.5rem;">
+                      <a href="{{ url_for('category_detail', cat_id=cat.id) }}">Ver detalles →</a>
+                      {% if cat.name not in ['faltan datos', 'extras'] %}
+                        | <a href="{{ url_for('edit_category', cat_id=cat.id) }}" style="color: #0b3d91;">Editar</a>
+                        | <a href="#" onclick="deleteCategory({{ cat.id }}, '{{ cat.name }}')" style="color: #dc3545;">Eliminar</a>
+                      {% endif %}
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty">No hay categorías de Kumite. <a href="{{ url_for('new_category', comp_id=competition.id) }}?modality=kumite">Crea una.</a></div>
+        {% endif %}
+      </div>
+    </div>
+  </main>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <script>
+        alert("{{ messages[0] }}");
+      </script>
+    {% endif %}
+  {% endwith %}
+
+  <script>
+    function showTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabName).classList.add('active');
+      event.target.classList.add('active');
+    }
+    
+    function deleteCategory(catId, catName) {
+      if (confirm(`¿Estás seguro de que quieres eliminar la categoría "${catName}"? Los participantes serán movidos a la categoría "extras".`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/category/${catId}/delete`;
+        document.body.appendChild(form);
+        form.submit();
+      }
+    }
+  </script>
+</body>
+</html>

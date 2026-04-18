@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crear categoría</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #f5f7fb; color: #111; font-size: 14px; }
+    main { max-width: 600px; margin: 2rem auto; background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+    h1 { color: #0b3d91; margin-bottom: 1.5rem; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-weight: 500; margin-bottom: 0.5rem; }
+    input, select { width: 100%; padding: 0.6rem; border: 1px solid #c4c7d0; border-radius: 8px; font-size: 1rem; }
+    input:focus, select:focus { outline: none; border-color: #0b3d91; box-shadow: 0 0 0 2px rgba(11, 61, 145, 0.1); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .buttons { display: flex; gap: 1rem; margin-top: 2rem; }
+    button { padding: 0.9rem 1.4rem; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem; }
+    .btn-primary { background: #0b3d91; color: white; }
+    .btn-primary:hover { background: #0f4ca0; }
+    .btn-secondary { background: #ddd; color: #111; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+    a { color: #0b3d91; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Crear categoría en {{ competition.name }}</h1>
+    <form method="post">
+      <div class="form-group">
+        <label for="name">Nombre de la categoría *</label>
+        <input type="text" id="name" name="name" required>
+      </div>
+
+      <div class="form-group">
+        <label for="group">Grupo/Subcategoría (opcional)</label>
+        <input type="text" id="group" name="group" placeholder="ej: Infantiles, Juveniles, Adultos">
+        <small style="display: block; margin-top: 0.3rem; color: #666;">Para organizar las categorías dentro de Kata/Kumite</small>
+      </div>
+
+      <div class="form-group">
+        <label for="modality">Modalidad *</label>
+        <select id="modality" name="modality" required onchange="updateForm()">
+          <option value="kata">Kata</option>
+          <option value="kumite">Kumite</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="gender">Género</label>
+        <select id="gender" name="gender">
+          <option value="X">Todos (X)</option>
+          <option value="M">Masculino (M)</option>
+          <option value="F">Femenino (F)</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="age_min">Edad mínima</label>
+          <input type="number" id="age_min" name="age_min" min="0">
+        </div>
+        <div class="form-group">
+          <label for="age_max">Edad máxima</label>
+          <input type="number" id="age_max" name="age_max" min="0">
+        </div>
+      </div>
+
+      <!-- Kata specific -->
+      <div id="kata-fields">
+        <div class="form-group">
+          <label>Rango de grados (Kata)</label>
+          <p style="font-size: 0.9rem; color: #666; margin-bottom: 0.5rem;">
+            Escala: 12 kyu (más bajo) → 1 kyu → 1 dan → 5 dan (más alto)
+          </p>
+          <div style="margin-bottom: 1rem; padding: 1rem; background: #f9f9f9; border-radius: 8px;">
+            <div style="margin-bottom: 0.8rem;">
+              <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
+                <input type="radio" id="grade_type_desde" name="grade_type" value="desde" onchange="updateGradeType()">
+                <span style="margin-left: 0.5rem;"><strong>Desde:</strong> este grado y más fuertes</span>
+              </label>
+              <small style="display: block; margin-left: 1.5rem; margin-top: 0.3rem; color: #666;">
+                Ej: "Desde 7" = 7 kyu, 1 kyu, 1 dan, 2 dan, ... 5 dan
+              </small>
+            </div>
+            <div>
+              <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
+                <input type="radio" id="grade_type_hasta" name="grade_type" value="hasta" onchange="updateGradeType()">
+                <span style="margin-left: 0.5rem;"><strong>Hasta:</strong> este grado y más débiles</span>
+              </label>
+              <small style="display: block; margin-left: 1.5rem; margin-top: 0.3rem; color: #666;">
+                Ej: "Hasta 7" = 7 kyu, 8 kyu, 9 kyu, ... 12 kyu
+              </small>
+            </div>
+          </div>
+          <div>
+            <label for="grade_value" id="grade_value_label" style="margin-bottom: 0.5rem;">Ingresa el grado</label>
+            <input type="text" id="grade_value" name="grade_value" placeholder="ej: 7, 1 kyu, 3 dan">
+          </div>
+        </div>
+      </div>
+
+      <!-- Kumite specific -->
+      <div id="kumite-fields" style="display:none;">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="weight_min">Peso mínimo (kg) - ej: 35</label>
+            <input type="number" id="weight_min" name="weight_min" min="0" step="0.1" placeholder="ej: 35">
+          </div>
+          <div class="form-group">
+            <label for="weight_max">Peso máximo (kg) - ej: 45</label>
+            <input type="number" id="weight_max" name="weight_max" min="0" step="0.1" placeholder="ej: 45">
+          </div>
+        </div>
+        <p style="font-size: 0.9rem; color: #666; margin-top: 1rem;">
+          Ejemplo: -35 kg (menor de 35), -45 kg (menor de 45), +80 kg (mayor de 80)
+        </p>
+      </div>
+
+      <div class="buttons">
+        <button type="submit" class="btn-primary">Crear categoría</button>
+        <a href="{{ url_for('competition_detail', comp_id=competition.id) }}" class="btn-secondary">Cancelar</a>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    function updateForm() {
+      const modality = document.getElementById('modality').value;
+      document.getElementById('kata-fields').style.display = modality === 'kata' ? 'block' : 'none';
+      document.getElementById('kumite-fields').style.display = modality === 'kumite' ? 'block' : 'none';
+    }
+    
+    function updateGradeType() {
+      const selectedType = document.querySelector('input[name="grade_type"]:checked');
+      const label = document.getElementById('grade_value_label');
+      if (selectedType && selectedType.value === 'desde') {
+        label.textContent = 'Grado (Desde → Más fuerte)';
+      } else if (selectedType && selectedType.value === 'hasta') {
+        label.textContent = 'Grado (Hasta → Más débil)';
+      }
+    }
+    
+    // Check URL param for modality
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('modality')) {
+      document.getElementById('modality').value = params.get('modality');
+      updateForm();
+    }
+  </script>
+</body>
+</html>
