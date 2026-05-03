@@ -5,7 +5,6 @@ from pathlib import Path
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_sqlalchemy import SQLAlchemy
-import pandas as pd
 from dateutil.relativedelta import relativedelta
 from unidecode import unidecode
 
@@ -138,7 +137,7 @@ def calculate_age_at_event(birthdate, event_date):
 
 def parse_grade(value):
     """Parse grade from string like '3' or '1 dan'."""
-    if pd.isna(value) or not value:
+    if not value:
         return None
     text = str(value).strip().lower()
     return text if text else None
@@ -177,123 +176,9 @@ def grade_to_numeric(grade_str):
         return None
 
 
-def normalize_excel_columns(df):
-    """Normalize Excel column names to expected fields."""
-    column_mapping = {
-        "numero_participante": "numero",
-        "nombre_participante": "name",
-        "edad": "age",
-        "fecha_nacimiento": "birthdate",
-        "grado": "grade",
-        "kata": "kata",
-        "kumite": "kumite",
-        "categoría": "category",
-        "pagó": "paid",
-        "peso": "weight",
-        "género": "gender",
-        "genero": "gender",
-    }
-    
-    df.columns = df.columns.str.strip().str.lower()
-    df = df.rename(columns=column_mapping)
-    return df
-
-
 def load_participants_from_excel(file, competition):
-    """Load participants from uploaded Excel file."""
-    try:
-        df = pd.read_excel(file, engine="openpyxl")
-    except Exception as e:
-        return False, f"Error leyendo Excel: {e}"
-    
-    df = normalize_excel_columns(df)
-    
-    # Debug: print available columns
-    available_cols = list(df.columns)
-    print(f"Available columns in Excel: {available_cols}")
-    print(f"First few rows:")
-    print(df.head(3))
-    
-    participants = []
-    errors = []
-    
-    for idx, row in df.iterrows():
-        try:
-            name = str(row.get("name", "")).strip()
-            if not name or name.lower() == "nan":
-                errors.append(f"Fila {idx+2}: falta nombre (columnas encontradas: {list(row.index)})")
-                continue
-            
-            birthdate_val = row.get("birthdate")
-            if pd.isna(birthdate_val) or str(birthdate_val).lower() == "nan":
-                errors.append(f"Fila {idx+2} ({name}): falta fecha de nacimiento")
-                continue
-            
-            try:
-                # Try DD/MM/YYYY first
-                birthdate = pd.to_datetime(birthdate_val, format="%d/%m/%Y", errors="coerce")
-                if pd.isna(birthdate):
-                    # Try dayfirst
-                    birthdate = pd.to_datetime(birthdate_val, dayfirst=True, errors="coerce")
-                if pd.isna(birthdate):
-                    # Try standard format
-                    birthdate = pd.to_datetime(birthdate_val, errors="coerce")
-                if pd.isna(birthdate):
-                    errors.append(f"Fila {idx+2} ({name}): fecha inválida '{birthdate_val}'")
-                    continue
-            except Exception as e:
-                errors.append(f"Fila {idx+2} ({name}): no se puede parsear la fecha '{birthdate_val}': {str(e)}")
-                continue
-            
-            gender = str(row.get("gender", "X")).strip().upper()
-            if gender.startswith("M"):
-                gender = "M"
-            elif gender.startswith("F"):
-                gender = "F"
-            else:
-                gender = "X"
-            
-            kata = "X" in str(row.get("kata", "")).upper().strip()
-            kumite = "X" in str(row.get("kumite", "")).upper().strip()
-            
-            grade = parse_grade(row.get("grade"))
-            weight = None
-            try:
-                weight_val = row.get("weight")
-                if not pd.isna(weight_val):
-                    weight = float(str(weight_val).replace(",", "."))
-            except:
-                pass
-            
-            participant = Participant(
-                competition_id=competition.id,
-                name=name,
-                birthdate=birthdate.date() if hasattr(birthdate, 'date') else birthdate,
-                gender=gender,
-                grade=grade,
-                weight=weight,
-                kata_participation=kata,
-                kumite_participation=kumite,
-            )
-            # Check for duplicate by name in this competition
-            existing = Participant.query.filter_by(competition_id=competition.id, name=name).first()
-            if existing:
-                errors.append(f"Fila {idx+2} ({name}): participante ya existe")
-                continue
-            participants.append(participant)
-        
-        except Exception as e:
-            errors.append(f"Fila {idx+2}: {str(e)}")
-    
-    if participants:
-        db.session.add_all(participants)
-        db.session.commit()
-    
-    msg = f"Se cargaron {len(participants)} participantes."
-    if errors:
-        msg += f" Errores: {'; '.join(errors[:3])}"  # Show first 3 errors
-    
-    return len(participants) > 0, msg
+    """Excel upload functionality removed for faster deployment."""
+    return False, "La carga masiva desde Excel no está disponible en esta versión optimizada. Use la opción de agregar participantes individualmente."
 
 
 def assign_participants_to_categories(competition, modality):
