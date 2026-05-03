@@ -1,40 +1,22 @@
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 import json
-import logging
 import os
 from pathlib import Path
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_sqlalchemy import SQLAlchemy
-from openpyxl import load_workbook
+import pandas as pd
 from dateutil.relativedelta import relativedelta
 from unidecode import unidecode
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 app = Flask(__name__)
 basedir = Path(__file__).parent
-
-# Database configuration
-if os.environ.get("DATABASE_URL"):
-    # Production: Use PostgreSQL from DATABASE_URL
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
-    logger.info("Using PostgreSQL database")
-else:
-    # Development: Use local SQLite
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{basedir / 'competitions.db'}"
-    logger.info("Using SQLite database")
-
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+    "DATABASE_URL",
+    f"sqlite:///{basedir / 'competitions.db'}"
+)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-key-change-in-production")
-
-# Production settings
-if os.environ.get("FLASK_ENV") == "production":
-    app.config["SESSION_COOKIE_SECURE"] = True
-    app.config["SESSION_COOKIE_HTTPONLY"] = True
-    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 db = SQLAlchemy(app)
 
@@ -44,7 +26,7 @@ class Competition(db.Model):
     __tablename__ = "competitions"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
-    event_date = db.Column(db.Date, nullable=False, default=date.today)
+    event_date = db.Column(db.Date, nullable=False, default=datetime.today)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
     categories = db.relationship("Category", back_populates="competition", cascade="all, delete-orphan")
@@ -156,7 +138,7 @@ def calculate_age_at_event(birthdate, event_date):
 
 def parse_grade(value):
     """Parse grade from string like '3' or '1 dan'."""
-    if not value:
+    if pd.isna(value) or not value:
         return None
     text = str(value).strip().lower()
     return text if text else None
@@ -195,7 +177,7 @@ def grade_to_numeric(grade_str):
         return None
 
 
-def normalize_excel_columns(headers):
+def normalize_excel_columns(df):
     """Normalize Excel column names to expected fields."""
     column_mapping = {
         "numero_participante": "numero",
@@ -211,137 +193,107 @@ def normalize_excel_columns(headers):
         "género": "gender",
         "genero": "gender",
     }
-
-    normalized = {}
-    for i, header in enumerate(headers):
-        header_clean = str(header).strip().lower() if header else ""
-        mapped_name = column_mapping.get(header_clean, header_clean)
-        normalized[mapped_name] = i
-
-    return normalized
+    
+    df.columns = df.columns.str.strip().str.lower()
+    df = df.rename(columns=column_mapping)
+    return df
 
 
 def load_participants_from_excel(file, competition):
-    """Load participants from uploaded Excel file using openpyxl directly."""
+    """Load participants from uploaded Excel file."""
     try:
-        # Handle Flask FileStorage object
-        if hasattr(file, 'stream'):
-            # It's a Flask FileStorage object
-            wb = load_workbook(file.stream, data_only=True)
-        else:
-            # It's a file path or file-like object
-            wb = load_workbook(file, data_only=True)
-        
-        ws = wb.active
-
-        # Get headers from first row
-        headers = []
-        for cell in ws[1]:
-            headers.append(cell.value)
-
-        column_map = normalize_excel_columns(headers)
-
-        # Debug: print available columns
-        available_cols = list(column_map.keys())
-        print(f"Available columns in Excel: {available_cols}")
-
-        participants = []
-        errors = []
-
-        # Process each row starting from row 2
-        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-            try:
-                # Convert row tuple to dict using column mapping
-                row_data = {}
-                for col_name, col_idx in column_map.items():
-                    if col_idx < len(row):
-                        row_data[col_name] = row[col_idx]
-
-                name = str(row_data.get("name", "")).strip()
-                if not name or name.lower() in ("none", "nan", ""):
-                    errors.append(f"Fila {row_idx}: falta nombre")
-                    continue
-
-                birthdate_val = row_data.get("birthdate")
-                if not birthdate_val or str(birthdate_val).lower() in ("none", "nan", ""):
-                    errors.append(f"Fila {row_idx} ({name}): falta fecha de nacimiento")
-                    continue
-
-                # Parse birthdate - try multiple formats
-                birthdate = None
-                birthdate_str = str(birthdate_val).strip()
-
-                # Try DD/MM/YYYY first
-                try:
-                    birthdate = datetime.strptime(birthdate_str, "%d/%m/%Y").date()
-                except ValueError:
-                    # Try other common formats
-                    for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y"]:
-                        try:
-                            birthdate = datetime.strptime(birthdate_str, fmt).date()
-                            break
-                        except ValueError:
-                            continue
-
-                if not birthdate:
-                    errors.append(f"Fila {row_idx} ({name}): formato de fecha inválido '{birthdate_str}'")
-                    continue
-
-                gender = str(row_data.get("gender", "X")).strip().upper()
-                if gender.startswith("M"):
-                    gender = "M"
-                elif gender.startswith("F"):
-                    gender = "F"
-                else:
-                    gender = "X"
-
-                kata = "X" in str(row_data.get("kata", "")).upper().strip()
-                kumite = "X" in str(row_data.get("kumite", "")).upper().strip()
-
-                grade = parse_grade(row_data.get("grade"))
-
-                weight = None
-                try:
-                    weight_val = row_data.get("weight")
-                    if weight_val is not None and str(weight_val).strip():
-                        weight = float(str(weight_val).replace(",", "."))
-                except (ValueError, TypeError):
-                    pass
-
-                participant = Participant(
-                    competition_id=competition.id,
-                    name=name,
-                    birthdate=birthdate,
-                    gender=gender,
-                    grade=grade,
-                    weight=weight,
-                    kata_participation=kata,
-                    kumite_participation=kumite,
-                )
-
-                # Check for duplicate by name in this competition
-                existing = Participant.query.filter_by(competition_id=competition.id, name=name).first()
-                if existing:
-                    errors.append(f"Fila {row_idx} ({name}): participante ya existe")
-                    continue
-
-                participants.append(participant)
-
-            except Exception as e:
-                errors.append(f"Fila {row_idx}: {str(e)}")
-
-        if participants:
-            db.session.add_all(participants)
-            db.session.commit()
-
-        msg = f"Se cargaron {len(participants)} participantes."
-        if errors:
-            msg += f" Errores: {'; '.join(errors[:3])}"  # Show first 3 errors
-
-        return len(participants) > 0, msg
-
+        df = pd.read_excel(file, engine="openpyxl")
     except Exception as e:
-        return False, f"Error procesando Excel: {str(e)}"
+        return False, f"Error leyendo Excel: {e}"
+    
+    df = normalize_excel_columns(df)
+    
+    # Debug: print available columns
+    available_cols = list(df.columns)
+    print(f"Available columns in Excel: {available_cols}")
+    print(f"First few rows:")
+    print(df.head(3))
+    
+    participants = []
+    errors = []
+    
+    for idx, row in df.iterrows():
+        try:
+            name = str(row.get("name", "")).strip()
+            if not name or name.lower() == "nan":
+                errors.append(f"Fila {idx+2}: falta nombre (columnas encontradas: {list(row.index)})")
+                continue
+            
+            birthdate_val = row.get("birthdate")
+            if pd.isna(birthdate_val) or str(birthdate_val).lower() == "nan":
+                errors.append(f"Fila {idx+2} ({name}): falta fecha de nacimiento")
+                continue
+            
+            try:
+                # Try DD/MM/YYYY first
+                birthdate = pd.to_datetime(birthdate_val, format="%d/%m/%Y", errors="coerce")
+                if pd.isna(birthdate):
+                    # Try dayfirst
+                    birthdate = pd.to_datetime(birthdate_val, dayfirst=True, errors="coerce")
+                if pd.isna(birthdate):
+                    # Try standard format
+                    birthdate = pd.to_datetime(birthdate_val, errors="coerce")
+                if pd.isna(birthdate):
+                    errors.append(f"Fila {idx+2} ({name}): fecha inválida '{birthdate_val}'")
+                    continue
+            except Exception as e:
+                errors.append(f"Fila {idx+2} ({name}): no se puede parsear la fecha '{birthdate_val}': {str(e)}")
+                continue
+            
+            gender = str(row.get("gender", "X")).strip().upper()
+            if gender.startswith("M"):
+                gender = "M"
+            elif gender.startswith("F"):
+                gender = "F"
+            else:
+                gender = "X"
+            
+            kata = "X" in str(row.get("kata", "")).upper().strip()
+            kumite = "X" in str(row.get("kumite", "")).upper().strip()
+            
+            grade = parse_grade(row.get("grade"))
+            weight = None
+            try:
+                weight_val = row.get("weight")
+                if not pd.isna(weight_val):
+                    weight = float(str(weight_val).replace(",", "."))
+            except:
+                pass
+            
+            participant = Participant(
+                competition_id=competition.id,
+                name=name,
+                birthdate=birthdate.date() if hasattr(birthdate, 'date') else birthdate,
+                gender=gender,
+                grade=grade,
+                weight=weight,
+                kata_participation=kata,
+                kumite_participation=kumite,
+            )
+            # Check for duplicate by name in this competition
+            existing = Participant.query.filter_by(competition_id=competition.id, name=name).first()
+            if existing:
+                errors.append(f"Fila {idx+2} ({name}): participante ya existe")
+                continue
+            participants.append(participant)
+        
+        except Exception as e:
+            errors.append(f"Fila {idx+2}: {str(e)}")
+    
+    if participants:
+        db.session.add_all(participants)
+        db.session.commit()
+    
+    msg = f"Se cargaron {len(participants)} participantes."
+    if errors:
+        msg += f" Errores: {'; '.join(errors[:3])}"  # Show first 3 errors
+    
+    return len(participants) > 0, msg
 
 
 def assign_participants_to_categories(competition, modality):
@@ -914,30 +866,8 @@ def delete_all_participants(comp_id):
     return redirect(url_for("list_participants", comp_id=comp_id))
 
 
-@app.errorhandler(500)
-def internal_error(error):
-    db.session.rollback()
-    logger.error(f"Internal Server Error: {error}")
-    if os.environ.get("FLASK_ENV") == "production":
-        return "<h1>Internal Server Error</h1><p>Something went wrong. Please try again later.</p>", 500
-    return f"<h1>Internal Server Error</h1><p>{str(error)}</p><p>Check the logs for more details.</p>", 500
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    db.session.rollback()
-    logger.error(f"Unhandled exception: {type(e).__name__}: {str(e)}")
-    if os.environ.get("FLASK_ENV") == "production":
-        return "<h1>Error</h1><p>An unexpected error occurred. Please try again later.</p>", 500
-    return f"<h1>Error: {type(e).__name__}</h1><p>{str(e)}</p>", 500
-
-@app.route("/health")
-def health_check():
-    """Health check endpoint for Render"""
-    try:
-        # Test database connection
-        db.session.execute(db.text("SELECT 1"))
-        return {"status": "healthy", "database": "connected"}, 200
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return {"status": "unhealthy", "error": str(e)}, 500
+if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True, host="0.0.0.0", port=5000)
 
