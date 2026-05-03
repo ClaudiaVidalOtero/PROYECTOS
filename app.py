@@ -274,6 +274,11 @@ def load_participants_from_excel(file, competition):
                 kata_participation=kata,
                 kumite_participation=kumite,
             )
+            # Check for duplicate by name in this competition
+            existing = Participant.query.filter_by(competition_id=competition.id, name=name).first()
+            if existing:
+                errors.append(f"Fila {idx+2} ({name}): participante ya existe")
+                continue
             participants.append(participant)
         
         except Exception as e:
@@ -770,6 +775,54 @@ def record_result(match_id):
 @app.route("/health")
 def health():
     return "OK", 200
+
+
+@app.route("/competition/<int:comp_id>/participants", methods=["GET"])
+def list_participants(comp_id):
+    competition = Competition.query.get_or_404(comp_id)
+    participants = Participant.query.filter_by(competition_id=comp_id).order_by(Participant.name).all()
+    return render_template("participants.html", competition=competition, participants=participants)
+
+
+@app.route("/participant/<int:part_id>/edit", methods=["GET", "POST"])
+def edit_participant(part_id):
+    participant = Participant.query.get_or_404(part_id)
+    competition = participant.competition
+    
+    if request.method == "POST":
+        participant.name = request.form["name"]
+        participant.birthdate = datetime.strptime(request.form["birthdate"], "%Y-%m-%d").date()
+        participant.gender = request.form["gender"]
+        participant.grade = request.form.get("grade") or None
+        participant.weight = float(request.form.get("weight")) if request.form.get("weight") else None
+        participant.kata_participation = "kata" in request.form
+        participant.kumite_participation = "kumite" in request.form
+        db.session.commit()
+        flash("Participante actualizado.")
+        return redirect(url_for("list_participants", comp_id=competition.id))
+    
+    return render_template("edit_participant.html", participant=participant, competition=competition)
+
+
+@app.route("/participant/<int:part_id>/delete", methods=["POST"])
+def delete_participant(part_id):
+    participant = Participant.query.get_or_404(part_id)
+    competition = participant.competition
+    db.session.delete(participant)
+    db.session.commit()
+    flash("Participante eliminado.")
+    return redirect(url_for("list_participants", comp_id=competition.id))
+
+
+@app.route("/competition/<int:comp_id>/participants/delete_all", methods=["POST"])
+def delete_all_participants(comp_id):
+    competition = Competition.query.get_or_404(comp_id)
+    participants = Participant.query.filter_by(competition_id=comp_id).all()
+    for participant in participants:
+        db.session.delete(participant)
+    db.session.commit()
+    flash("Todos los participantes han sido eliminados.")
+    return redirect(url_for("list_participants", comp_id=comp_id))
 
 
 if __name__ == "__main__":

@@ -71,6 +71,7 @@
       <div class="tabs">
         <button class="tab-btn active" onclick="showTab('kata')">KATA</button>
         <button class="tab-btn" onclick="showTab('kumite')">KUMITE</button>
+        <button class="tab-btn" onclick="showTab('participants')">PARTICIPANTES</button>
       </div>
 
       <!-- KATA -->
@@ -193,6 +194,14 @@
         {% else %}
           <div class="empty">No hay categorías de Kumite. <a href="{{ url_for('new_category', comp_id=competition.id) }}?modality=kumite">Crea una.</a></div>
         {% endif %}
+      </div>
+
+      <!-- PARTICIPANTES -->
+      <div id="participants" class="tab-content">
+        <div class="form-section">
+          <p><strong>Total participantes:</strong> {{ competition.participants|length }}</p>
+          <a href="{{ url_for('list_participants', comp_id=competition.id) }}">Ver y gestionar participantes →</a>
+        </div>
       </div>
     </div>
   </main>

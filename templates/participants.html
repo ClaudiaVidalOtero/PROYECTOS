@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Participantes - {{ competition.name }}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #f5f7fb; color: #111; font-size: 14px; }
+    main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
+    h1 { color: #0b3d91; margin-bottom: 1rem; font-size: 1.5rem; }
+    .header { background: white; padding: 1rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); margin-bottom: 1.5rem; }
+    .header p { margin: 0.3rem 0; }
+    .header a { color: #0b3d91; text-decoration: none; }
+    .header a:hover { text-decoration: underline; }
+    .participants { display: grid; gap: 1rem; }
+    .part-card { background: white; padding: 1rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+    .part-card h3 { color: #0b3d91; margin-bottom: 0.5rem; }
+    .part-card p { margin: 0.3rem 0; font-size: 0.95rem; }
+    .part-card a { color: #0b3d91; text-decoration: none; display: inline-block; margin-top: 0.5rem; }
+    .part-card a:hover { text-decoration: underline; }
+    .actions { margin-top: 0.5rem; }
+    .actions a { margin-right: 1rem; }
+    .empty { text-align: center; padding: 2rem 1rem; color: #888; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Participantes - {{ competition.name }}</h1>
+    
+    <div class="header">
+      <p><a href="{{ url_for('competition_detail', comp_id=competition.id) }}">← Volver a la competición</a></p>
+      {% if participants %}
+        <form method="post" action="{{ url_for('delete_all_participants', comp_id=competition.id) }}" style="display: inline;" onsubmit="return confirm('¿Estás seguro de que quieres eliminar TODOS los participantes? Esta acción no se puede deshacer.')">
+          <button type="submit" style="background: #dc3545; color: white; padding: 0.5rem 1rem; border: none; border-radius: 8px; cursor: pointer;">Eliminar todos los participantes</button>
+        </form>
+      {% endif %}
+    </div>
+
+    {% if participants %}
+      <div class="participants">
+        {% for participant in participants %}
+          <div class="part-card">
+            <h3>{{ participant.name }}</h3>
+            <p><strong>Fecha de nacimiento:</strong> {{ participant.birthdate.strftime('%d/%m/%Y') }}</p>
+            <p><strong>Género:</strong> {{ participant.gender }}</p>
+            {% if participant.grade %}
+              <p><strong>Grado:</strong> {{ participant.grade }}</p>
+            {% endif %}
+            {% if participant.weight %}
+              <p><strong>Peso:</strong> {{ participant.weight }} kg</p>
+            {% endif %}
+            <p><strong>Kata:</strong> {{ 'Sí' if participant.kata_participation else 'No' }} | <strong>Kumite:</strong> {{ 'Sí' if participant.kumite_participation else 'No' }}</p>
+            <div class="actions">
+              <a href="{{ url_for('edit_participant', part_id=participant.id) }}">Editar</a>
+              <form method="post" action="{{ url_for('delete_participant', part_id=participant.id) }}" style="display: inline;" onsubmit="return confirm('¿Eliminar este participante?')">
+                <button type="submit" style="color: #dc3545; background: none; border: none; cursor: pointer; text-decoration: underline;">Eliminar</button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty">No hay participantes cargados.</div>
+    {% endif %}
+  </main>
+</body>
+</html>
