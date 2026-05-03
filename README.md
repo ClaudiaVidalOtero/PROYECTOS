@@ -21,12 +21,22 @@ Sistema de gestión de competiciones de karate con soporte para participantes, c
 
 ## Despliegue en Render
 
-El proyecto está optimizado para despliegue rápido en Render:
+La aplicación está completamente configurada para despliegue en Render con:
 
-- **Dependencias ligeras**: Se removió pandas pero se mantiene openpyxl para carga Excel
-- **Implementación directa**: Uso de openpyxl sin pandas para mejor rendimiento
-- **Configuración de puerto**: Automáticamente usa el puerto asignado por Render
-- **Base de datos**: Usa SQLite por defecto (considera PostgreSQL para producción)
+- **Base de datos PostgreSQL** automática
+- **Configuración optimizada** para producción
+- **Health checks** integrados
+- **Variables de entorno** seguras
+
+### Pasos rápidos:
+
+1. Sube tu código a GitHub
+2. Conecta el repo a Render
+3. Render detectará automáticamente `render.yaml`
+4. Configura el secreto `flask-secret-key`
+5. ¡Listo! Tu app estará online
+
+Ver [DEPLOY_RENDER.md](DEPLOY_RENDER.md) para instrucciones detalladas.
 
 ### Optimización de Build
 

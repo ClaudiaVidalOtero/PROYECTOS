@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -8,16 +9,32 @@ from flask_sqlalchemy import SQLAlchemy
 from openpyxl import load_workbook
 from dateutil.relativedelta import relativedelta
 from unidecode import unidecode
-import datetime
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 basedir = Path(__file__).parent
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
-    "DATABASE_URL",
-    f"sqlite:///{basedir / 'competitions.db'}"
-)
+
+# Database configuration
+if os.environ.get("DATABASE_URL"):
+    # Production: Use PostgreSQL from DATABASE_URL
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+    logger.info("Using PostgreSQL database")
+else:
+    # Development: Use local SQLite
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{basedir / 'competitions.db'}"
+    logger.info("Using SQLite database")
+
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-key-change-in-production")
+
+# Production settings
+if os.environ.get("FLASK_ENV") == "production":
+    app.config["SESSION_COOKIE_SECURE"] = True
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 db = SQLAlchemy(app)
 
@@ -27,8 +44,8 @@ class Competition(db.Model):
     __tablename__ = "competitions"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
-    event_date = db.Column(db.Date, nullable=False, default=datetime.date.today)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
+    event_date = db.Column(db.Date, nullable=False, default=date.today)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
     categories = db.relationship("Category", back_populates="competition", cascade="all, delete-orphan")
     participants = db.relationship("Participant", back_populates="competition", cascade="all, delete-orphan")
@@ -81,7 +98,7 @@ class Participant(db.Model):
     kata_participation = db.Column(db.Boolean, default=False)
     kumite_participation = db.Column(db.Boolean, default=False)
     
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
     competition = db.relationship("Competition", back_populates="participants")
     category_links = db.relationship(
@@ -120,7 +137,7 @@ class Match(db.Model):
     winner_id = db.Column(db.Integer, db.ForeignKey("participants.id"), nullable=True)
     status = db.Column(db.String(20), default="pending")  # pending, completed, bye
     
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
     competition = db.relationship("Competition", back_populates="matches")
     category = db.relationship("Category", back_populates="matches")
@@ -207,7 +224,14 @@ def normalize_excel_columns(headers):
 def load_participants_from_excel(file, competition):
     """Load participants from uploaded Excel file using openpyxl directly."""
     try:
-        wb = load_workbook(file, data_only=True)
+        # Handle Flask FileStorage object
+        if hasattr(file, 'stream'):
+            # It's a Flask FileStorage object
+            wb = load_workbook(file.stream, data_only=True)
+        else:
+            # It's a file path or file-like object
+            wb = load_workbook(file, data_only=True)
+        
         ws = wb.active
 
         # Get headers from first row
@@ -249,12 +273,12 @@ def load_participants_from_excel(file, competition):
 
                 # Try DD/MM/YYYY first
                 try:
-                    birthdate = datetime.datetime.strptime(birthdate_str, "%d/%m/%Y").date()
+                    birthdate = datetime.strptime(birthdate_str, "%d/%m/%Y").date()
                 except ValueError:
                     # Try other common formats
                     for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y"]:
                         try:
-                            birthdate = datetime.datetime.strptime(birthdate_str, fmt).date()
+                            birthdate = datetime.strptime(birthdate_str, fmt).date()
                             break
                         except ValueError:
                             continue
@@ -890,10 +914,30 @@ def delete_all_participants(comp_id):
     return redirect(url_for("list_participants", comp_id=comp_id))
 
 
-if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-    port = int(os.environ.get("PORT", 5000))
-    debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
-    app.run(debug=debug_mode, host="0.0.0.0", port=port)
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    logger.error(f"Internal Server Error: {error}")
+    if os.environ.get("FLASK_ENV") == "production":
+        return "<h1>Internal Server Error</h1><p>Something went wrong. Please try again later.</p>", 500
+    return f"<h1>Internal Server Error</h1><p>{str(error)}</p><p>Check the logs for more details.</p>", 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    db.session.rollback()
+    logger.error(f"Unhandled exception: {type(e).__name__}: {str(e)}")
+    if os.environ.get("FLASK_ENV") == "production":
+        return "<h1>Error</h1><p>An unexpected error occurred. Please try again later.</p>", 500
+    return f"<h1>Error: {type(e).__name__}</h1><p>{str(e)}</p>", 500
+
+@app.route("/health")
+def health_check():
+    """Health check endpoint for Render"""
+    try:
+        # Test database connection
+        db.session.execute(db.text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}, 200
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {"status": "unhealthy", "error": str(e)}, 500
 
