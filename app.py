@@ -5,8 +5,10 @@ from pathlib import Path
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_sqlalchemy import SQLAlchemy
+from openpyxl import load_workbook
 from dateutil.relativedelta import relativedelta
 from unidecode import unidecode
+import datetime
 
 app = Flask(__name__)
 basedir = Path(__file__).parent
@@ -25,8 +27,8 @@ class Competition(db.Model):
     __tablename__ = "competitions"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
-    event_date = db.Column(db.Date, nullable=False, default=datetime.today)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    event_date = db.Column(db.Date, nullable=False, default=datetime.date.today)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
     
     categories = db.relationship("Category", back_populates="competition", cascade="all, delete-orphan")
     participants = db.relationship("Participant", back_populates="competition", cascade="all, delete-orphan")
@@ -79,7 +81,7 @@ class Participant(db.Model):
     kata_participation = db.Column(db.Boolean, default=False)
     kumite_participation = db.Column(db.Boolean, default=False)
     
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
     
     competition = db.relationship("Competition", back_populates="participants")
     category_links = db.relationship(
@@ -118,7 +120,7 @@ class Match(db.Model):
     winner_id = db.Column(db.Integer, db.ForeignKey("participants.id"), nullable=True)
     status = db.Column(db.String(20), default="pending")  # pending, completed, bye
     
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
     
     competition = db.relationship("Competition", back_populates="matches")
     category = db.relationship("Category", back_populates="matches")
@@ -176,9 +178,146 @@ def grade_to_numeric(grade_str):
         return None
 
 
+def normalize_excel_columns(headers):
+    """Normalize Excel column names to expected fields."""
+    column_mapping = {
+        "numero_participante": "numero",
+        "nombre_participante": "name",
+        "edad": "age",
+        "fecha_nacimiento": "birthdate",
+        "grado": "grade",
+        "kata": "kata",
+        "kumite": "kumite",
+        "categoría": "category",
+        "pagó": "paid",
+        "peso": "weight",
+        "género": "gender",
+        "genero": "gender",
+    }
+
+    normalized = {}
+    for i, header in enumerate(headers):
+        header_clean = str(header).strip().lower() if header else ""
+        mapped_name = column_mapping.get(header_clean, header_clean)
+        normalized[mapped_name] = i
+
+    return normalized
+
+
 def load_participants_from_excel(file, competition):
-    """Excel upload functionality removed for faster deployment."""
-    return False, "La carga masiva desde Excel no está disponible en esta versión optimizada. Use la opción de agregar participantes individualmente."
+    """Load participants from uploaded Excel file using openpyxl directly."""
+    try:
+        wb = load_workbook(file, data_only=True)
+        ws = wb.active
+
+        # Get headers from first row
+        headers = []
+        for cell in ws[1]:
+            headers.append(cell.value)
+
+        column_map = normalize_excel_columns(headers)
+
+        # Debug: print available columns
+        available_cols = list(column_map.keys())
+        print(f"Available columns in Excel: {available_cols}")
+
+        participants = []
+        errors = []
+
+        # Process each row starting from row 2
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            try:
+                # Convert row tuple to dict using column mapping
+                row_data = {}
+                for col_name, col_idx in column_map.items():
+                    if col_idx < len(row):
+                        row_data[col_name] = row[col_idx]
+
+                name = str(row_data.get("name", "")).strip()
+                if not name or name.lower() in ("none", "nan", ""):
+                    errors.append(f"Fila {row_idx}: falta nombre")
+                    continue
+
+                birthdate_val = row_data.get("birthdate")
+                if not birthdate_val or str(birthdate_val).lower() in ("none", "nan", ""):
+                    errors.append(f"Fila {row_idx} ({name}): falta fecha de nacimiento")
+                    continue
+
+                # Parse birthdate - try multiple formats
+                birthdate = None
+                birthdate_str = str(birthdate_val).strip()
+
+                # Try DD/MM/YYYY first
+                try:
+                    birthdate = datetime.datetime.strptime(birthdate_str, "%d/%m/%Y").date()
+                except ValueError:
+                    # Try other common formats
+                    for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y"]:
+                        try:
+                            birthdate = datetime.datetime.strptime(birthdate_str, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+
+                if not birthdate:
+                    errors.append(f"Fila {row_idx} ({name}): formato de fecha inválido '{birthdate_str}'")
+                    continue
+
+                gender = str(row_data.get("gender", "X")).strip().upper()
+                if gender.startswith("M"):
+                    gender = "M"
+                elif gender.startswith("F"):
+                    gender = "F"
+                else:
+                    gender = "X"
+
+                kata = "X" in str(row_data.get("kata", "")).upper().strip()
+                kumite = "X" in str(row_data.get("kumite", "")).upper().strip()
+
+                grade = parse_grade(row_data.get("grade"))
+
+                weight = None
+                try:
+                    weight_val = row_data.get("weight")
+                    if weight_val is not None and str(weight_val).strip():
+                        weight = float(str(weight_val).replace(",", "."))
+                except (ValueError, TypeError):
+                    pass
+
+                participant = Participant(
+                    competition_id=competition.id,
+                    name=name,
+                    birthdate=birthdate,
+                    gender=gender,
+                    grade=grade,
+                    weight=weight,
+                    kata_participation=kata,
+                    kumite_participation=kumite,
+                )
+
+                # Check for duplicate by name in this competition
+                existing = Participant.query.filter_by(competition_id=competition.id, name=name).first()
+                if existing:
+                    errors.append(f"Fila {row_idx} ({name}): participante ya existe")
+                    continue
+
+                participants.append(participant)
+
+            except Exception as e:
+                errors.append(f"Fila {row_idx}: {str(e)}")
+
+        if participants:
+            db.session.add_all(participants)
+            db.session.commit()
+
+        msg = f"Se cargaron {len(participants)} participantes."
+        if errors:
+            msg += f" Errores: {'; '.join(errors[:3])}"  # Show first 3 errors
+
+        return len(participants) > 0, msg
+
+    except Exception as e:
+        return False, f"Error procesando Excel: {str(e)}"
 
 
 def assign_participants_to_categories(competition, modality):

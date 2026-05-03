@@ -5,6 +5,7 @@ Sistema de gestión de competiciones de karate con soporte para participantes, c
 ## Características
 
 - Gestión de competiciones y participantes
+- **Carga masiva de participantes desde Excel** (optimizada sin pandas)
 - Creación de categorías para kata y kumite
 - Búsqueda y filtrado de participantes
 - Interfaz web responsiva
@@ -22,13 +23,14 @@ Sistema de gestión de competiciones de karate con soporte para participantes, c
 
 El proyecto está optimizado para despliegue rápido en Render:
 
-- **Dependencias ligeras**: Se removieron pandas y openpyxl para builds más rápidos
+- **Dependencias ligeras**: Se removió pandas pero se mantiene openpyxl para carga Excel
+- **Implementación directa**: Uso de openpyxl sin pandas para mejor rendimiento
 - **Configuración de puerto**: Automáticamente usa el puerto asignado por Render
 - **Base de datos**: Usa SQLite por defecto (considera PostgreSQL para producción)
 
-### Cambios de Optimización
+### Optimización de Build
 
-Para acelerar el despliegue, se removió la funcionalidad de carga masiva desde Excel. Los participantes deben agregarse individualmente a través de la interfaz web.
+Para acelerar el despliegue, se implementó la carga Excel usando openpyxl directamente en lugar de pandas, manteniendo toda la funcionalidad pero con builds mucho más rápidos.
 
 ## Uso
 
