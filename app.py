@@ -7,6 +7,7 @@ from flask import Flask, flash, jsonify, redirect, render_template, request, url
 from flask_sqlalchemy import SQLAlchemy
 import pandas as pd
 from dateutil.relativedelta import relativedelta
+from unidecode import unidecode
 
 app = Flask(__name__)
 basedir = Path(__file__).parent
@@ -504,14 +505,54 @@ def new_competition():
 @app.route("/competition/<int:comp_id>", methods=["GET"])
 def competition_detail(comp_id):
     competition = Competition.query.get_or_404(comp_id)
-    kata_cats = Category.query.filter_by(competition_id=comp_id, modality="kata").all()
-    kumite_cats = Category.query.filter_by(competition_id=comp_id, modality="kumite").all()
+    participant_search = request.args.get("participant_search", "").strip()
+    category_search = request.args.get("category_search", "").strip()
+    active_tab = request.args.get("active_tab", "")
+
+    participant_query = Participant.query.filter_by(competition_id=comp_id)
+    if participant_search:
+        # Búsqueda insensible a acentos y mayúsculas usando unidecode
+        search_normalized = unidecode(participant_search).lower()
+        participant_query = participant_query.filter(
+            db.func.lower(Participant.name).like(f"%{search_normalized}%")
+        )
+    participants = participant_query.order_by(Participant.name).all()
+    
+    # Si hay búsqueda, filtrar adicionalmente por acentos en Python
+    if participant_search:
+        search_normalized = unidecode(participant_search).lower()
+        participants = [p for p in participants if search_normalized in unidecode(p.name).lower()]
+    
+    kata_query = Category.query.filter_by(competition_id=comp_id, modality="kata")
+    kumite_query = Category.query.filter_by(competition_id=comp_id, modality="kumite")
+    if category_search:
+        # Búsqueda insensible a acentos y mayúsculas usando unidecode
+        search_normalized = unidecode(category_search).lower()
+        kata_query = kata_query.filter(
+            db.func.lower(Category.name).like(f"%{search_normalized}%")
+        )
+        kumite_query = kumite_query.filter(
+            db.func.lower(Category.name).like(f"%{search_normalized}%")
+        )
+    
+    kata_cats = kata_query.all()
+    kumite_cats = kumite_query.all()
+    
+    # Si hay búsqueda de categorías, filtrar adicionalmente por acentos en Python
+    if category_search:
+        search_normalized = unidecode(category_search).lower()
+        kata_cats = [c for c in kata_cats if search_normalized in unidecode(c.name).lower()]
+        kumite_cats = [c for c in kumite_cats if search_normalized in unidecode(c.name).lower()]
     
     return render_template(
         "competition.html",
         competition=competition,
         kata_categories=kata_cats,
-        kumite_categories=kumite_cats
+        kumite_categories=kumite_cats,
+        participants=participants,
+        participant_search=participant_search,
+        category_search=category_search,
+        active_tab=active_tab
     )
 
 
@@ -799,7 +840,7 @@ def edit_participant(part_id):
         participant.kumite_participation = "kumite" in request.form
         db.session.commit()
         flash("Participante actualizado.")
-        return redirect(url_for("list_participants", comp_id=competition.id))
+        return redirect(url_for("competition_detail", comp_id=competition.id, participant_search=""))
     
     return render_template("edit_participant.html", participant=participant, competition=competition)
 
@@ -811,7 +852,7 @@ def delete_participant(part_id):
     db.session.delete(participant)
     db.session.commit()
     flash("Participante eliminado.")
-    return redirect(url_for("list_participants", comp_id=competition.id))
+    return redirect(url_for("competition_detail", comp_id=competition.id, participant_search=""))
 
 
 @app.route("/competition/<int:comp_id>/participants/delete_all", methods=["POST"])

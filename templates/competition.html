@@ -47,6 +47,23 @@
       <p><a href="{{ url_for('competition_settings', comp_id=competition.id) }}">Editar configuración</a> · <a href="{{ url_for('index') }}">Volver</a></p>
     </div>
 
+    <div class="section">
+      <h2>Buscar participantes</h2>
+      <div class="form-section">
+        <form method="get" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
+          <input type="text" name="participant_search" value="{{ participant_search }}" placeholder="Buscar participantes por nombre..." style="padding: 0.7rem; border: 1px solid #ddd; border-radius: 8px; flex: 1; min-width: 220px;">
+          <input type="hidden" name="active_tab" value="participants">
+          {% if category_search %}
+            <input type="hidden" name="category_search" value="{{ category_search }}">
+          {% endif %}
+          <button type="submit">Buscar</button>
+          {% if participant_search %}
+            <a href="{{ url_for('competition_detail', comp_id=competition.id) }}" style="color: #6c757d; text-decoration: none;">Limpiar</a>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+
     <!-- Cargar Excel -->
     <div class="section">
       <h2>Cargar participantes</h2>
@@ -69,14 +86,26 @@
       <h2>Categorías</h2>
       
       <div class="tabs">
-        <button class="tab-btn active" onclick="showTab('kata')">KATA</button>
-        <button class="tab-btn" onclick="showTab('kumite')">KUMITE</button>
-        <button class="tab-btn" onclick="showTab('participants')">PARTICIPANTES</button>
+        <button class="tab-btn {% if not active_tab or active_tab == 'kata' %}active{% endif %}" onclick="clearSearchAndShowTab('kata')">KATA</button>
+        <button class="tab-btn {% if active_tab == 'kumite' %}active{% endif %}" onclick="clearSearchAndShowTab('kumite')">KUMITE</button>
+        <button class="tab-btn {% if active_tab == 'participants' %}active{% endif %}" onclick="clearSearchAndShowTab('participants')">PARTICIPANTES</button>
       </div>
 
       <!-- KATA -->
-      <div id="kata" class="tab-content active">
+      <div id="kata" class="tab-content {% if not active_tab or active_tab == 'kata' %}active{% endif %}">
         <div class="form-section">
+          <form method="get" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 1rem;">
+            <input type="text" name="category_search" value="{{ category_search }}" placeholder="Buscar categorías de kata..." style="padding: 0.7rem; border: 1px solid #ddd; border-radius: 8px; flex: 1; min-width: 220px;">
+            <input type="hidden" name="active_tab" value="kata">
+            {% if participant_search %}
+              <input type="hidden" name="participant_search" value="{{ participant_search }}">
+            {% endif %}
+            <button type="submit">Buscar</button>
+            {% if category_search %}
+              <a href="{{ url_for('competition_detail', comp_id=competition.id) }}" style="color: #6c757d; text-decoration: none;">Limpiar</a>
+            {% endif %}
+          </form>
+          
           <p><strong>Participantes en Kata:</strong> {% set kata_count = competition.participants|selectattr('kata_participation', 'equalto', true)|list|length %}{{ kata_count }}</p>
           
           {% if kata_count > 0 %}
@@ -137,8 +166,20 @@
       </div>
 
       <!-- KUMITE -->
-      <div id="kumite" class="tab-content">
+      <div id="kumite" class="tab-content {% if active_tab == 'kumite' %}active{% endif %}">
         <div class="form-section">
+          <form method="get" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 1rem;">
+            <input type="text" name="category_search" value="{{ category_search }}" placeholder="Buscar categorías de kumite..." style="padding: 0.7rem; border: 1px solid #ddd; border-radius: 8px; flex: 1; min-width: 220px;">
+            <input type="hidden" name="active_tab" value="kumite">
+            {% if participant_search %}
+              <input type="hidden" name="participant_search" value="{{ participant_search }}">
+            {% endif %}
+            <button type="submit">Buscar</button>
+            {% if category_search %}
+              <a href="{{ url_for('competition_detail', comp_id=competition.id) }}" style="color: #6c757d; text-decoration: none;">Limpiar</a>
+            {% endif %}
+          </form>
+          
           <p><strong>Participantes en Kumite:</strong> {% set kumite_count = competition.participants|selectattr('kumite_participation', 'equalto', true)|list|length %}{{ kumite_count }}</p>
           
           {% if kumite_count > 0 %}
@@ -197,11 +238,39 @@
       </div>
 
       <!-- PARTICIPANTES -->
-      <div id="participants" class="tab-content">
-        <div class="form-section">
-          <p><strong>Total participantes:</strong> {{ competition.participants|length }}</p>
-          <a href="{{ url_for('list_participants', comp_id=competition.id) }}">Ver y gestionar participantes →</a>
-        </div>
+      <div id="participants" class="tab-content {% if active_tab == 'participants' %}active{% endif %}">
+        {% if participants %}
+          <div class="form-section" style="position: relative;">
+            <div style="position: absolute; top: 1rem; right: 1rem;">
+              <form method="post" action="{{ url_for('delete_all_participants', comp_id=competition.id) }}" onsubmit="return confirm('¿Estás seguro de que quieres eliminar TODOS los participantes? Esta acción no se puede deshacer.')">
+                <button type="submit" style="background: #dc3545; color: white; padding: 0.5rem 1rem; border: none; border-radius: 8px; cursor: pointer;">Eliminar todos</button>
+              </form>
+            </div>
+            
+            {% for participant in participants %}
+              <div class="part-card">
+                <h3>{{ participant.name }}</h3>
+                <p><strong>Fecha de nacimiento:</strong> {{ participant.birthdate.strftime('%d/%m/%Y') }}</p>
+                <p><strong>Género:</strong> {{ participant.gender }}</p>
+                {% if participant.grade %}
+                  <p><strong>Grado:</strong> {{ participant.grade }}</p>
+                {% endif %}
+                {% if participant.weight %}
+                  <p><strong>Peso:</strong> {{ participant.weight }} kg</p>
+                {% endif %}
+                <p><strong>Kata:</strong> {{ 'Sí' if participant.kata_participation else 'No' }} | <strong>Kumite:</strong> {{ 'Sí' if participant.kumite_participation else 'No' }}</p>
+                <div class="actions">
+                  <a href="{{ url_for('edit_participant', part_id=participant.id) }}">Editar</a>
+                  <form method="post" action="{{ url_for('delete_participant', part_id=participant.id) }}" style="display: inline;" onsubmit="return confirm('¿Eliminar este participante?')">
+                    <button type="submit" style="color: #dc3545; background: none; border: none; cursor: pointer; text-decoration: underline;">Eliminar</button>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty">No hay participantes que coincidan con la búsqueda.</div>
+        {% endif %}
       </div>
     </div>
   </main>
@@ -215,11 +284,39 @@
   {% endwith %}
 
   <script>
-    function showTab(tabName) {
+    function showTab(tabName, btn) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
       document.getElementById(tabName).classList.add('active');
-      event.target.classList.add('active');
+      btn.classList.add('active');
+    }
+    
+    function clearSearchAndShowTab(tabName) {
+      // Construir URL base
+      let url = window.location.pathname + '?';
+      let params = [];
+      
+      // Mantener solo los parámetros necesarios según la pestaña
+      const urlParams = new URLSearchParams(window.location.search);
+      for (let [key, value] of urlParams) {
+        if (key !== 'active_tab') { // Siempre remover active_tab
+          if (tabName === 'participants' && key === 'participant_search') {
+            // No incluir participant_search cuando cambiamos a participants
+            continue;
+          } else if ((tabName === 'kata' || tabName === 'kumite') && key === 'category_search') {
+            // No incluir category_search cuando cambiamos a kata o kumite
+            continue;
+          } else {
+            params.push(key + '=' + encodeURIComponent(value));
+          }
+        }
+      }
+      
+      // Agregar active_tab
+      params.push('active_tab=' + tabName);
+      
+      // Redirigir a la URL limpia
+      window.location.href = url + params.join('&');
     }
     
     function deleteCategory(catId, catName) {
